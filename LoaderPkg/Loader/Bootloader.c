@@ -114,6 +114,15 @@ InitGraphics (
   // Hint: Use QueryMode/SetMode functions.
   //
 
+  for (UINT32 mode_num = 0; mode_num < GraphicsOutput->Mode->MaxMode; ++mode_num) {
+    UINTN size;
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* info;
+    GraphicsOutput->QueryMode(GraphicsOutput, mode_num, &size, &info);
+    DEBUG ((DEBUG_ERROR, "%d: %d*%d, %d\n", mode_num, info->HorizontalResolution, info->VerticalResolution, size));
+  }
+
+  GraphicsOutput->SetMode(GraphicsOutput, 10); // 10: 1280*720, 36
+
   //
   // Fill screen with black.
   //
@@ -275,7 +284,7 @@ GetKernelFile (
   // get loader's containing device.
   //
   // LAB 1: Your code here
-  (void)LoadedImage;
+  Status = gBS->HandleProtocol(gImageHandle, &gEfiLoadedImageProtocolGuid, (void**)(&LoadedImage));
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find LoadedImage protocol - %r\n", Status));
@@ -293,7 +302,7 @@ GetKernelFile (
   // to read the kernel from it later.
   //
   // LAB 1: Your code here
-  (void)FileSystem;
+  Status = gBS->HandleProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void**)(&FileSystem));
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find own FileSystem protocol - %r\n", Status));
@@ -305,7 +314,7 @@ GetKernelFile (
   // NOTE: Don't forget to Use ->Close after you've done using it.
   //
   // LAB 1: Your code here
-  (void)CurrentDriveRoot;
+  Status = FileSystem->OpenVolume(FileSystem, &CurrentDriveRoot);
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
@@ -318,6 +327,7 @@ GetKernelFile (
   //
   // LAB 1: Your code here
   KernelFile = NULL;
+  Status = CurrentDriveRoot->Open(CurrentDriveRoot, &KernelFile, KERNEL_PATH, EFI_FILE_MODE_READ, EFI_FILE_READ_ONLY);
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
@@ -325,6 +335,7 @@ GetKernelFile (
   }
 
   *FileProtocol = KernelFile;
+  CurrentDriveRoot->Close(CurrentDriveRoot);
   return EFI_SUCCESS;
 }
 
@@ -987,15 +998,15 @@ UefiMain (
   UINTN              EntryPoint;
   VOID               *GateData;
 
-#if 1 ///< Uncomment to await debugging
-  volatile BOOLEAN   Connected;
-  DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
+// #if 1 ///< Uncomment to await debugging
+//   volatile BOOLEAN   Connected;
+//   DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
 
-  Connected = FALSE;
-  while (!Connected) {
-    ;
-  }
-#endif
+//   Connected = FALSE;
+//   while (!Connected) {
+//     ;
+//   }
+// #endif
 
   Status = gRT->GetTime (&Now, NULL);
   if (EFI_ERROR (Status)) {
