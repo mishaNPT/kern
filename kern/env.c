@@ -89,6 +89,12 @@ env_init(void) {
     /* Set up envs array */
 
     // LAB 3: Your code here
+    for (int i = NENV - 1; i >= 0; --i) {
+        envs[i].env_status = ENV_FREE;
+        envs[i].env_id = 0;
+        envs[i].env_link = env_free_list;
+        env_free_list = &envs[i];
+    }
 }
 
 /* Allocates and initializes a new environment.
@@ -145,7 +151,9 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_cs = GD_KT;
 
     // LAB 3: Your code here:
-    // static uintptr_t stack_top = 0x2000000;
+    static uintptr_t stack_top = 0x2000000;
+    env->env_tf.tf_rsp = stack_top;
+    stack_top -= PAGE_SIZE * 2;
 #else
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
@@ -172,7 +180,43 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
     // LAB 3: Your code here:
 
     /* NOTE: find_function from kdebug.c should be used */
-
+    int i, strtab = -1;
+    struct Elf *elf    = (struct Elf *)binary;
+    struct Secthdr *sh = (struct Secthdr *)(binary + elf->e_shoff);
+    const char *sh_str  = (char *)binary + sh[elf->e_shstrndx].sh_offset;
+    for (i = 0; i < elf->e_shnum; ++i) {
+        if (sh[i].sh_type == ELF_SHT_STRTAB) {
+            if (!strcmp(".strtab", sh_str + sh[i].sh_name)) {
+                strtab = i;
+                break;
+            }
+        }
+    }
+    if (strtab < 0) {
+        panic("Can't find strtab!\n");
+        return 0;
+    }
+    const char *str = (char *)binary + sh[strtab].sh_offset;
+    for (int i = 0; i < elf->e_shnum; ++i) {
+        if (sh[i].sh_type == ELF_SHT_SYMTAB) {
+            if (!strcmp(".symtab", sh_str + sh[i].sh_name)) {
+                struct Elf64_Sym *sym = (struct Elf64_Sym *)(binary + sh[i].sh_offset);
+                int num_sym = sh[i].sh_size / sizeof(sym[0]);
+                int j;
+                for (j = 0; j < num_sym; ++j) {
+                    if (ELF64_ST_BIND(sym[j].st_info) == STB_GLOBAL && ELF64_ST_TYPE(sym[j].st_info) == STT_OBJECT && sym[j].st_size == sizeof(void *)) {
+                        const char *name = str + sym[j].st_name;
+                        uintptr_t addr = find_function(name);
+                        if (addr) {
+                            if (sym[j].st_value >= image_start && sym[j].st_value <= image_end) {
+                                memcpy((void *)sym[j].st_value, &addr, sizeof(void *));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     return 0;
 }
 
@@ -219,7 +263,59 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
+    struct Elf *elf = (struct Elf *) binary;
+    if (elf->e_magic != ELF_MAGIC) {
+        cprintf("Incorrect format of ELF file");
+        return -E_INVALID_EXE;
+    }
 
+    if (elf->e_shentsize != sizeof (struct Secthdr)) {
+        cprintf("Incorrect section size");
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_shstrndx >= elf->e_shnum) {
+        cprintf("Incorrect index of string section");
+        return -E_INVALID_EXE;
+    }
+
+    if (elf->e_phentsize != sizeof (struct Proghdr)) {
+        cprintf("Incorrect size of program headers");
+        return -E_INVALID_EXE;
+    }
+
+    uintptr_t image_start = 0;
+    uintptr_t image_end = 0;
+    bool start_set = 0;
+    struct Proghdr *ph_array = (struct Proghdr *)(binary + elf->e_phoff);
+    for (size_t i = 0; i < elf->e_phnum; ++i) {
+        struct Proghdr *ph = ph_array + i;
+        if (ph->p_type != ELF_PROG_LOAD)
+            continue;
+
+        void *src = binary + ph->p_offset;
+        void *dst = (void *)(ph->p_va);
+
+        if (ph->p_filesz > ph->p_memsz) {
+            cprintf("Incorrect filesz of a section");
+            return -E_INVALID_EXE;
+        }
+
+        if (src + ph->p_filesz > (void *)binary + size || src < (void *)binary)
+            continue;
+
+        if (!start_set || (uintptr_t) dst < image_start) {
+            image_start = (uintptr_t) dst;
+            start_set = 1;
+        }
+        if (image_end < (uintptr_t)(dst + ph->p_memsz))
+            image_end = (uintptr_t)(dst + ph->p_memsz);
+
+        memcpy(dst, src, ph->p_filesz);
+        memset(dst + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
+    }
+    env->env_tf.tf_rip = elf->e_entry;
+    bind_functions(env, binary, size, image_start, image_end);
     return 0;
 }
 
@@ -232,6 +328,11 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
+    struct Env* new_env;
+    int r;
+    if ((r = env_alloc(&new_env, 0, type)) != 0) 
+        panic("env_create() error: %i", r);
+    load_icode(new_env, binary, size);
 }
 
 
@@ -260,6 +361,11 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
+    env->env_status = ENV_DYING;
+    if (env == curenv) {
+        env_free(env);
+        sched_yield();
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -290,7 +396,7 @@ env_pop_tf(struct Trapframe *tf) {
     *((uintptr_t *)tf->tf_rsp) = tf->tf_rip;
     /* Push RFLAGS on program stack */
     tf->tf_rsp -= sizeof(uintptr_t);
-    *((uintptr_t *)tf->tf_rsp) = tf->tf_rflags;
+    *((uintptr_t *)tf->tf_rsp) = tf->tf_rflags; // zavisaet vot tut
 
     asm volatile(
             "movq %0, %%rsp\n"
@@ -349,7 +455,11 @@ env_run(struct Env *env) {
     }
 
     // LAB 3: Your code here
+    if (curenv != NULL && curenv->env_status == ENV_RUNNING)
+        curenv->env_status = ENV_RUNNABLE;
+    curenv = env;
+    env->env_status = ENV_RUNNING;
+    env->env_runs++;
 
-    while (1)
-        ;
+    env_pop_tf(&env->env_tf);
 }
