@@ -118,7 +118,7 @@ InitGraphics (
     UINTN size;
     EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* info;
     GraphicsOutput->QueryMode(GraphicsOutput, mode_num, &size, &info);
-    DEBUG ((DEBUG_ERROR, "%d: %d*%d, %d\n", mode_num, info->HorizontalResolution, info->VerticalResolution, size));
+    //DEBUG ((DEBUG_ERROR, "%d: %d*%d, %d\n", mode_num, info->HorizontalResolution, info->VerticalResolution, size));
   }
 
   GraphicsOutput->SetMode(GraphicsOutput, 10); // 10: 1280*720, 36
