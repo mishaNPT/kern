@@ -87,8 +87,37 @@ acpi_find_table(const char *sign) {
      * HINT: You may want to distunguish RSDT/XSDT
      */
     // LAB 5: Your code here:
+    uint8_t sum = 0;
+    RSDP* rsdp = (RSDP*)mmio_map_region(uefi_lp->ACPIRoot, sizeof(RSDP));
+    
+    for (int i = 0; i < sizeof(RSDP); ++i) {
+        sum += ((char*)rsdp)[i];
+    }
+    if (sum) panic("Error: rsdp doesnt work");
 
-    return NULL;
+    sum = 0;
+    RSDT* rsdt = (RSDT*)mmio_map_region(rsdp->XsdtAddress, sizeof(RSDT));
+    ACPISDTHeader* h = (ACPISDTHeader*)mmio_map_region((physaddr_t)& rsdt->h, sizeof(ACPISDTHeader));
+    ACPISDTHeader* acpi_h = NULL;
+    int entries = (h->Length - sizeof(h)) / 8;
+    uint64_t* sdts = (uint64_t*) rsdt->PointerToOtherSDT;
+
+    for (int i = 0; i < entries; ++i) {
+        h = (ACPISDTHeader*) mmio_remap_last_region(sdts[i], h, sizeof(ACPISDTHeader), sizeof(ACPISDTHeader));
+        if (!strncmp(h->Signature, sign, 4)) {
+            acpi_h = h;
+            break;
+        }
+    }
+
+    if (!acpi_h) return NULL;
+
+    for (int i = 0; i < acpi_h->Length; ++i) {
+        sum += ((char*) acpi_h)[i];
+    }
+
+    if (sum) return NULL;
+    return acpi_h;
 }
 
 /* Obtain and map FADT ACPI table address. */
@@ -99,7 +128,9 @@ get_fadt(void) {
     // HINT: ACPI table signatures are
     //       not always as their names
 
-    return NULL;
+    FADT* fadt = (FADT*) acpi_find_table("FACP");
+    if (!fadt) panic("Error: no fadt in acpi");
+    return fadt;
 }
 
 /* Obtain and map RSDP ACPI table address. */
@@ -108,7 +139,9 @@ get_hpet(void) {
     // LAB 5: Your code here
     // (use acpi_find_table)
 
-    return NULL;
+    HPET* hpet = (HPET*) acpi_find_table("HPET");
+    if (!hpet) panic("Eroor: no hpet in acpi");
+    return hpet;
 }
 
 /* Getting physical HPET timer address from its table. */
@@ -209,11 +242,21 @@ hpet_get_main_cnt(void) {
 void
 hpet_enable_interrupts_tim0(void) {
     // LAB 5: Your code here
+    hpetReg->GEN_CONF |= HPET_LEG_RT_CNF;
+    hpetReg->TIM0_CONF |= HPET_TN_TYPE_CNF | HPET_TN_SIZE_CAP | HPET_TN_VAL_SET_CNF;
+    hpetReg->TIM0_COMP = hpetFreq * 0.5;
+    hpetReg->TIM0_CONF |= HPET_TN_INT_ENB_CNF;
+    pic_irq_unmask(IRQ_TIMER);
 }
 
 void
 hpet_enable_interrupts_tim1(void) {
     // LAB 5: Your code here
+    hpetReg->GEN_CONF |= HPET_LEG_RT_CNF;
+    hpetReg->TIM1_CONF |= HPET_TN_TYPE_CNF | HPET_TN_SIZE_CAP | HPET_TN_VAL_SET_CNF;
+    hpetReg->TIM1_COMP = hpetFreq * 1.5;
+    hpetReg->TIM1_CONF |= HPET_TN_INT_ENB_CNF;;
+    pic_irq_unmask(IRQ_CLOCK);
 }
 
 void
@@ -235,6 +278,13 @@ hpet_cpu_frequency(void) {
 
     // LAB 5: Your code here
 
+    uint64_t t0 = hpet_get_main_cnt();
+    uint64_t tsc0 = read_tsc();
+    asm volatile ("pause");
+    uint64_t t1 = hpet_get_main_cnt();
+    uint64_t tsc1 = read_tsc();
+
+    cpu_freq = (tsc1 - tsc0) * hpetFreq / (t1 - t0);
     return cpu_freq;
 }
 
@@ -252,6 +302,12 @@ pmtimer_cpu_frequency(void) {
     static uint64_t cpu_freq;
 
     // LAB 5: Your code here
+    uint64_t t0 = pmtimer_get_timeval();
+    uint64_t tsc0 = read_tsc();
+    asm volatile ("pause");
+    uint64_t t1 = pmtimer_get_timeval();
+    uint64_t tsc1 = read_tsc();
 
+    cpu_freq = (tsc1 - tsc0) * PM_FREQ / (t1 - t0);
     return cpu_freq;
 }
