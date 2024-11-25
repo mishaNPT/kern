@@ -87,37 +87,48 @@ acpi_find_table(const char *sign) {
      * HINT: You may want to distunguish RSDT/XSDT
      */
     // LAB 5: Your code here:
-    uint8_t sum = 0;
-    RSDP* rsdp = (RSDP*)mmio_map_region(uefi_lp->ACPIRoot, sizeof(RSDP));
-    
-    for (int i = 0; i < sizeof(RSDP); ++i) {
-        sum += ((char*)rsdp)[i];
-    }
-    if (sum) panic("Error: rsdp doesnt work");
 
-    sum = 0;
-    RSDT* rsdt = (RSDT*)mmio_map_region(rsdp->XsdtAddress, sizeof(RSDT));
-    ACPISDTHeader* h = (ACPISDTHeader*)mmio_map_region((physaddr_t)& rsdt->h, sizeof(ACPISDTHeader));
-    ACPISDTHeader* acpi_h = NULL;
-    int entries = (h->Length - sizeof(h)) / 8;
-    uint64_t* sdts = (uint64_t*) rsdt->PointerToOtherSDT;
+    static RSDT* rsdt;
+    static size_t rsdt_len;
+    static size_t rsdt_entrsz;
 
-    for (int i = 0; i < entries; ++i) {
-        h = (ACPISDTHeader*) mmio_remap_last_region(sdts[i], h, sizeof(ACPISDTHeader), sizeof(ACPISDTHeader));
-        if (!strncmp(h->Signature, sign, 4)) {
-            acpi_h = h;
-            break;
+    if (!rsdt) {
+        if (!uefi_lp->ACPIRoot) {
+            panic("Error: no rsdt");
+        }
+        RSDP* rsdp = mmio_map_region(uefi_lp->ACPIRoot, sizeof(RSDP));
+
+        uint64_t rsdt_pa = rsdp->RsdtAddress;
+        rsdt_entrsz = 4;
+        if (rsdp->Revision) {
+            rsdt_pa = rsdp->XsdtAddress;
+            rsdt_entrsz = 8;
+        }
+
+        rsdt = mmio_map_region(rsdt_pa, sizeof(RSDT));
+        // remap
+        rsdt = mmio_map_region(rsdt_pa, rsdt->h.Length);
+
+        rsdt_len = (rsdt->h.Length - sizeof(RSDT)) / 4;
+        if (rsdp->Revision) {
+            rsdt_len /= 2;
         }
     }
 
-    if (!acpi_h) return NULL;
+    ACPISDTHeader* hd = NULL;
 
-    for (int i = 0; i < acpi_h->Length; ++i) {
-        sum += ((char*) acpi_h)[i];
+    for (size_t i = 0; i < rsdt_len; ++i) {
+        uint64_t fadt_pa = 0;
+        memcpy(&fadt_pa, (uint8_t *)rsdt->PointerToOtherSDT + i * rsdt_entrsz, rsdt_entrsz);
+
+        hd = mmio_map_region(fadt_pa, sizeof(ACPISDTHeader));
+        // remap
+        hd = mmio_map_region(fadt_pa, hd->Length);
+
+        if (!strncmp(hd->Signature, sign, 4)) return hd;
     }
 
-    if (sum) return NULL;
-    return acpi_h;
+    return NULL;
 }
 
 /* Obtain and map FADT ACPI table address. */
@@ -277,14 +288,19 @@ hpet_cpu_frequency(void) {
     static uint64_t cpu_freq;
 
     // LAB 5: Your code here
+    uint64_t delta = 0, time_res = 100, target = hpetFreq / time_res;
 
     uint64_t t0 = hpet_get_main_cnt();
     uint64_t tsc0 = read_tsc();
-    asm volatile ("pause");
-    uint64_t t1 = hpet_get_main_cnt();
+
+    do {
+        asm volatile ("pause");
+        delta = hpet_get_main_cnt() - t0;
+    } while (delta < target);
+    
     uint64_t tsc1 = read_tsc();
 
-    cpu_freq = (tsc1 - tsc0) * hpetFreq / (t1 - t0);
+    cpu_freq = (tsc1 - tsc0) * time_res;
     return cpu_freq;
 }
 
@@ -302,12 +318,24 @@ pmtimer_cpu_frequency(void) {
     static uint64_t cpu_freq;
 
     // LAB 5: Your code here
+    uint64_t delta = 0, time_res = 100, target = PM_FREQ / time_res;
+
     uint64_t t0 = pmtimer_get_timeval();
     uint64_t tsc0 = read_tsc();
-    asm volatile ("pause");
-    uint64_t t1 = pmtimer_get_timeval();
+    
+    do {
+        asm volatile ("pause");
+        uint64_t t1 = pmtimer_get_timeval();
+        delta = t1 - t0;
+        if (-delta <= 0xFFFFFF) {
+            delta += 0xFFFFFF;
+        } else if (t0 > t1) {
+            delta += 0xFFFFFFFF;
+        }
+    } while (delta < target);
+
     uint64_t tsc1 = read_tsc();
 
-    cpu_freq = (tsc1 - tsc0) * PM_FREQ / (t1 - t0);
+    cpu_freq = (tsc1 - tsc0) * PM_FREQ / delta;
     return cpu_freq;
 }
