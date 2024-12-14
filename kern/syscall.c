@@ -55,7 +55,7 @@ sys_env_destroy(envid_t envid) {
     if (envid2env(envid, &env, 1)) {
         return -E_BAD_ENV;
     }
-#if 0 /* TIP: Use this snippet to log required for passing grade tests info */
+#if 1 /* TIP: Use this snippet to log required for passing grade tests info */
     if (trace_envs) {
         cprintf(env == curenv ?
                         "[%08x] exiting gracefully\n" :
@@ -63,7 +63,7 @@ sys_env_destroy(envid_t envid) {
                 curenv->env_id, env->env_id);
     }
 #endif
-
+    env_destroy(env);
     return 0;
 }
 
