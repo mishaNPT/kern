@@ -68,10 +68,23 @@ platform_abort() {
 static bool
 asan_shadow_allocator(struct UTrapframe *utf) {
     // LAB 9: Your code here
-    if (!(asan_internal_shadow_start <= utf->utf_fault_va && asan_internal_shadow_end >= utf->utf_fault_va))
-        return 0;
-    sys_alloc_region(curenv, utf->utf_fault_va, SHADOW_STEP, ALLOC_ONE);    
-    return 0;
+    uintptr_t shadow_start = ROUNDDOWN((uintptr_t) utf->utf_fault_va, SHADOW_STEP);
+    uintptr_t shadow_end = shadow_start + SHADOW_STEP;
+    if (!SHADOW_ADDRESS_VALID(shadow_start)) {
+        return false;
+    }
+    if (!SHADOW_ADDRESS_VALID(shadow_end - 1)) {
+        return false;
+    }
+    if (ADDRESS_FOR_SHADOW(shadow_start) <= shadow_start && shadow_start < ADDRESS_FOR_SHADOW(shadow_end)) {
+        return false;
+    }
+    if (ADDRESS_FOR_SHADOW(shadow_start) <= shadow_end && shadow_end < ADDRESS_FOR_SHADOW(shadow_end)) {
+        return false;
+    }
+
+    int res = sys_alloc_region(CURENVID, (void *) shadow_start, SHADOW_STEP, ALLOC_ONE | PROT_R | PROT_W);
+    return res == 0;   
 }
 #endif
 
@@ -98,7 +111,7 @@ static int
 asan_unpoison_shared_region(void *start, void *end, void *arg) {
     (void)start, (void)end, (void)arg;
     // LAB 8: Your code here
-    platform_asan_unpoison(start, end- start);
+    platform_asan_unpoison(start, end - start);
     return 0;
 }
 
