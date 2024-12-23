@@ -8,14 +8,15 @@
 #include <inc/elf.h>
 
 #include <kern/env.h>
-#include <kern/pmap.h>
-#include <kern/trap.h>
-#include <kern/monitor.h>
-#include <kern/sched.h>
 #include <kern/kdebug.h>
 #include <kern/macro.h>
+#include <kern/monitor.h>
 #include <kern/pmap.h>
+#include <kern/pmap.h>
+#include <kern/sched.h>
+#include <kern/timer.h>
 #include <kern/traceopt.h>
+#include <kern/trap.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -187,7 +188,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
 #endif
 
     /* For now init trapframe with IF set */
-    env->env_tf.tf_rflags = FL_IF;
+    env->env_tf.tf_rflags = FL_IF | (type == ENV_TYPE_FS ? FL_IOPL_3 : FL_IOPL_0);
 
     /* Clear the page fault handler until user installs one. */
     env->env_pgfault_upcall = 0;
@@ -293,6 +294,7 @@ static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
     // LAB 8: Your code here
+<<<<<<< HEAD
     struct Elf *elf = (struct Elf *) binary;
     if (elf->e_magic != ELF_MAGIC) {
         cprintf("Incorrect format of ELF file");
@@ -355,6 +357,19 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 #ifdef CONFIG_KSPACE
     bind_functions(env, binary, size, image_start, image_end);
 #endif    
+=======
+
+    /* NOTE: When merging origin/lab10 put this hunk at the end
+     *       of the function, when user stack is already mapped. */
+    if (env->env_type == ENV_TYPE_FS) {
+        /* If we are about to start filesystem server we need to pass
+         * information about PCIe MMIO region to it. */
+        struct AddressSpace *as = switch_address_space(&env->address_space);
+        env->env_tf.tf_rsp = make_fs_args((char *)env->env_tf.tf_rsp);
+        switch_address_space(as);
+    }
+
+>>>>>>> origin/lab10
     return 0;
 }
 
@@ -375,8 +390,12 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
         panic("load_icode() error: %i", status);
     
     // LAB 8: Your code here
+<<<<<<< HEAD
     new_env->binary = binary;
     new_env->env_type = type;
+=======
+    // LAB 10: Your code here
+>>>>>>> origin/lab10
 }
 
 
@@ -416,11 +435,15 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
+<<<<<<< HEAD
     env->env_status = ENV_DYING;
     env_free(env);
     if (env == curenv) {
         sched_yield();
     }
+=======
+    // LAB 10: Your code here
+>>>>>>> origin/lab10
 
     /* Reset in_page_fault flags in case *current* environment
      * is getting destroyed after performing invalid memory access. */
