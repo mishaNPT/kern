@@ -34,7 +34,9 @@ ipc_recv(envid_t *from_env_store, void *pg, size_t *size, int *perm_store) {
     } else {
         if (from_env_store) *from_env_store = thisenv->env_ipc_from;
 
-        if (perm_store) *perm_store = thisenv->env_ipc_perm;
+        if (perm_store && pg != (void*)MAX_USER_ADDRESS) *perm_store = thisenv->env_ipc_perm;
+
+        if (size) *size = PAGE_SIZE;
 
         return thisenv->env_ipc_value;
     }
@@ -53,11 +55,11 @@ ipc_send(envid_t to_env, uint32_t val, void *pg, size_t size, int perm) {
     // LAB 9: Your code here:
     if (!pg) pg = (void*)MAX_USER_ADDRESS;
 
-    int errno;
-    while ((errno = sys_ipc_try_send(to_env, val, pg, size, perm))) {
-        if (errno != -E_IPC_NOT_RECV)
-            panic("IPC send error: %i", errno);
+    int res = sys_ipc_try_send(to_env, val, pg, size, perm);
+    while (res < 0) {
+        if (res < 0 && res != -E_IPC_NOT_RECV) panic("ipc send err: %i", res);
         sys_yield();
+        res = sys_ipc_try_send(to_env, val, pg, size, perm); 
     }
 }
 
