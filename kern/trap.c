@@ -156,10 +156,10 @@ trap_init(void) {
     idt[T_PGFLT].gd_ist = 1;
 
     // LAB 11: Your code here
-    extern void kbd_intr(void);
-    idt[IRQ_OFFSET + IRQ_KBD] = GATE(0, GD_KT, (uint64_t)kbd_intr, 3);
-    extern void serial_intr(void);
-    idt[IRQ_OFFSET + IRQ_SERIAL] = GATE(0, GD_KT, (uint64_t)serial_intr, 3);
+    extern void kbd_thdlr(void);
+    idt[IRQ_OFFSET + IRQ_KBD] = GATE(0, GD_KT, (uint64_t)kbd_thdlr, 3);
+    extern void serial_thdlr(void);
+    idt[IRQ_OFFSET + IRQ_SERIAL] = GATE(0, GD_KT, (uint64_t)serial_thdlr, 3);
 
     /* Per-CPU setup */
     trap_init_percpu();
