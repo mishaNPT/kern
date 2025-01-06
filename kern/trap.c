@@ -304,7 +304,8 @@ trap_dispatch(struct Trapframe *tf) {
         // LAB 5: Your code here
         // LAB 12: Your code here
         timer_for_schedule->handle_interrupts();
-        vsys[VSYS_gettime] = gettime();
+        //vsys[VSYS_gettime] = gettime();
+        __atomic_store_n(&vsys[VSYS_gettime], gettime(), __ATOMIC_RELEASE); 
         sched_yield();
         return;
         // LAB 11: Your code here
@@ -475,6 +476,7 @@ page_fault_handler(struct Trapframe *tf) {
             }
         user_mem_assert(curenv, (void *)tf->tf_rsp, sizeof(struct UTrapframe), PROT_W | PROT_USER_);        
         env_destroy(curenv);
+        sched_yield();
     }
 
     /* Force allocation of exception stack page to prevent memcpy from
@@ -515,7 +517,7 @@ page_fault_handler(struct Trapframe *tf) {
 
     /* Reset in_page_fault flag */
     // LAB 9: Your code here:
-    if (envs->env_tf.tf_trapno == T_PGFLT) {
+    if (curenv->env_tf.tf_trapno == T_PGFLT) {
         in_page_fault = 0;
     }
 

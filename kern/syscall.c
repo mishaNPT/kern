@@ -24,7 +24,14 @@ sys_cputs(const char *s, size_t len) {
     /* Check that the user has permission to read memory [s, s+len).
      * Destroy the environment if not. */
     user_mem_assert(curenv, s, len, PROT_R | PROT_USER_);
-    cprintf("%.*s", (int)len, s);
+
+    const char buf[128];
+    int cur_len = 0;
+    while (cur_len < len) {
+        nosan_memcpy((void*)buf, (void*)s, MIN(128, len - cur_len));
+        cprintf("%.*s", (int)MIN(128, len - cur_len), buf);
+        cur_len += MIN(128, len - cur_len);
+    }
     return 0;
 }
 
@@ -170,7 +177,7 @@ sys_alloc_region(envid_t envid, uintptr_t addr, size_t size, int perm) {
     // LAB 9: Your code here:
     struct Env* env;
     if (envid2env(envid, &env, 1)) return -E_BAD_ENV;
-    if (CLASS_MASK(0) & addr || addr > MAX_USER_ADDRESS || perm & ~PROT_ALL) return -E_INVAL;
+    if (CLASS_MASK(0) & addr || addr > MAX_USER_ADDRESS || perm & ~(PROT_ALL | ALLOC_ONE | ALLOC_ZERO)) return -E_INVAL; 
 
     perm |= PROT_LAZY;
     perm |= PROT_USER_;
