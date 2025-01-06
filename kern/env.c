@@ -19,6 +19,7 @@
 #include <kern/traceopt.h>
 #include <kern/trap.h>
 #include <kern/vsyscall.h>
+#include <kern/kclock.h>
 
 /* Currently active environment */
 struct Env *curenv = NULL;
@@ -115,6 +116,7 @@ env_init(void) {
         vsys = kzalloc_region(UVSYS_SIZE);
         memset((void*)vsys, 0, ROUNDUP(UVSYS_SIZE, PAGE_SIZE));
         map_region(current_space, UVSYS, &kspace, (uintptr_t)vsys, UVSYS_SIZE, PROT_R | PROT_USER_);
+        __atomic_store_n(&vsys[VSYS_gettime], gettime(), __ATOMIC_RELEASE);
     }
 
     /* Set up envs array */
