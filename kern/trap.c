@@ -302,12 +302,10 @@ trap_dispatch(struct Trapframe *tf) {
         //rtc_timer_pic_handle();
         //sched_yield();
         // LAB 5: Your code here
-<<<<<<< HEAD
-        timer_for_schedule->handle_interrupts();
-        sched_yield();
-=======
         // LAB 12: Your code here
->>>>>>> lab12
+        timer_for_schedule->handle_interrupts();
+        vsys[VSYS_gettime] = gettime();
+        sched_yield();
         return;
         // LAB 11: Your code here
         /* Handle keyboard (IRQ_KBD + kbd_intr()) and

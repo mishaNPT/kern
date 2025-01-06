@@ -103,13 +103,19 @@ env_init(void) {
      * Don't forget about rounding.
      * kzalloc_region() only works with current_space != NULL */
     // LAB 8: Your code here
-    envs = kzalloc_region(NENV * sizeof(*envs));
-    memset(envs, 0, ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE));
+    if (current_space != NULL) {
+        envs = kzalloc_region(NENV * sizeof(*envs));
+        memset(envs, 0, ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE));
 
-    /* Map envs to UENVS read-only,
-     * but user-accessible (with PROT_USER_ set) */
-    // LAB 8: Your code here
-    map_region(current_space, UENVS, &kspace, (uintptr_t)envs, UENVS_SIZE, PROT_R | PROT_USER_);
+        /* Map envs to UENVS read-only,
+        * but user-accessible (with PROT_USER_ set) */
+        // LAB 8: Your code here
+        map_region(current_space, UENVS, &kspace, (uintptr_t)envs, UENVS_SIZE, PROT_R | PROT_USER_);
+
+        vsys = kzalloc_region(UVSYS_SIZE);
+        memset((void*)vsys, 0, ROUNDUP(UVSYS_SIZE, PAGE_SIZE));
+        map_region(current_space, UVSYS, &kspace, (uintptr_t)vsys, UVSYS_SIZE, PROT_R | PROT_USER_);
+    }
 
     /* Set up envs array */
     env_free_list = &envs[0];
