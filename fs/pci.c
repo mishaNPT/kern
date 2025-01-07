@@ -491,7 +491,6 @@ pci_init(char **argv) {
 
 void get_virtio_bar_and_offset(struct PciDevice* pcid, uint8_t* barrno, uint32_t* offset) {
     uint8_t cap_offset = pcie_io.read8(pcid, PCI_REG_CAPABILITIES);
-    cprintf("OFFSET: %u\n", cap_offset);
 
     while (cap_offset != 0) {
         // Прочитать текущую способность
@@ -504,10 +503,6 @@ void get_virtio_bar_and_offset(struct PciDevice* pcid, uint8_t* barrno, uint32_t
         // Обработать конкретную способность (cap_vndr определяет тип)
         if (cap_vndr == 0x09) { // Vendor-specific capability
             if (cap_type == 1) {
-                //cprintf("VENDOR: 0x%x\n", pcid->vendor_id);
-                //cprintf("TYPE: %u\n", cap_type);
-                //cprintf("BAR: %u\n", cap_bar);
-                //cprintf("OFFSET: %u\n", new_offset);
                 *barrno = cap_bar;
                 *offset = new_offset;
                 return;

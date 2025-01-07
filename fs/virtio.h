@@ -124,7 +124,7 @@ struct virtio_disk {
     int queue_index;
     volatile uint16_t* used_index;
     uint16_t last_used_index;
-    char free[VIRTQ_ENTRY_NUM];
+    bool free[VIRTQ_ENTRY_NUM];
     struct virtio_blk_req* blk_req;
 };
 
