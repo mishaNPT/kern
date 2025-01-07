@@ -9,6 +9,7 @@
 #include "pci.h"
 #include "fs.h"
 #include "nvme.h"
+#include "virtio.h"
 
 /* The file system server maintains three structures
  * for each open file.
@@ -327,7 +328,10 @@ umain(int argc, char **argv) {
     cprintf("FS is running\n");
 
     pci_init(argv);
-    nvme_init();
+    cprintf("PCI init\n");
+    //nvme_init();
+    virtio_disk_init();
+    cprintf("VIRRTIO disk init\n");
 
     /* Check that we are able to do I/O */
     outw(0x8A00, 0x8A00);
@@ -336,5 +340,5 @@ umain(int argc, char **argv) {
     serve_init();
     fs_init();
     fs_test();
-    serve();
+    serve(); 
 }
