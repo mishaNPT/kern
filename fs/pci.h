@@ -153,6 +153,8 @@ struct PcieIoOps {
     void (*write8)(struct PciDevice *pcid, uint8_t reg, uint8_t val);
 };
 
+void get_virtio_bar_and_offset(struct PciDevice* pcid, uint8_t* barrno, uint32_t* offset);
+
 extern uint64_t tsc_freq;
 
 #endif

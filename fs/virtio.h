@@ -11,27 +11,6 @@
 #define VIRTIO_DEVICE_BLK 2
 #define VIRTIO_BLK_PADDR  0x10001000
 
-#define VIRTIO_REG_MAGIC              0x00
-#define VIRTIO_REG_VERSION            0x04
-#define VIRTIO_REG_DEVICE_ID          0x08
-#define VIRTIO_REG_DEVICE_FEATURES	  0x10
-#define VIRTIO_REG_DRIVER_FEATURES	  0x20
-#define VIRTIO_REG_QUEUE_SEL          0x30
-#define VIRTIO_REG_QUEUE_NUM_MAX      0x34
-#define VIRTIO_REG_QUEUE_NUM          0x38
-#define VIRTIO_REG_QUEUE_ALIGN        0x3c
-#define VIRTIO_REG_QUEUE_PFN          0x40
-#define VIRTIO_REG_QUEUE_READY        0x44
-#define VIRTIO_REG_QUEUE_NOTIFY       0x50
-#define VIRTIO_REG_DEVICE_STATUS      0x70
-#define VIRTIO_REG_QUEUE_DESC_LOW	  0x80 // physical address for descriptor table, write-only
-#define VIRTIO_REG_QUEUE_DESC_HIGH	  0x84
-#define VIRTIO_REG_DRIVER_DESC_LOW	  0x90 // physical address for available ring, write-only
-#define VIRTIO_REG_DRIVER_DESC_HIGH   0x94
-#define VIRTIO_REG_DEVICE_DESC_LOW	  0xa0 // physical address for used ring, write-only
-#define VIRTIO_REG_DEVICE_DESC_HIGH   0xa4
-#define VIRTIO_REG_DEVICE_CONFIG      0x100
-
 // device feature bits
 #define VIRTIO_BLK_F_RO              5	/* Disk is read-only */
 #define VIRTIO_BLK_F_SCSI            7	/* Supports scsi command passthru */
@@ -52,9 +31,6 @@
 
 #define VIRTIO_BLK_T_IN  0
 #define VIRTIO_BLK_T_OUT 1
-
-#define VIRTIO_REG32(reg, offset) ((volatile uint32_t*)((uint8_t *)(reg) + offset))
-#define VIRTIO_REG64(reg, offset) ((volatile uint64_t*)((uint8_t *)(reg) + offset))
 
 /* NVMe error codes */
 enum vertio_error {
@@ -108,19 +84,49 @@ struct virtio_blk_req {
     uint8_t status;
 } PACKED;
 
+struct virtio_pci_common_cfg {
+    /* About the whole device. */
+    uint32_t device_feature_select; /* read-write */
+    uint32_t device_feature; /* read-only for driver */
+    uint32_t driver_feature_select; /* read-write */
+    uint32_t driver_feature; /* read-write */
+    uint16_t config_msix_vector; /* read-write */
+    uint16_t num_queues; /* read-only for driver */
+    uint8_t device_status; /* read-write */
+    uint8_t config_generation; /* read-only for driver */
+    /* About a specific virtqueue. */
+    uint16_t queue_select; /* read-write */
+    uint16_t queue_size; /* read-write */
+    uint16_t queue_msix_vector; /* read-write */
+    uint16_t queue_enable; /* read-write */
+    uint16_t queue_notify_off; /* read-only for driver */
+    uint64_t queue_desc; /* read-write */
+    uint64_t queue_driver; /* read-write */
+    uint64_t queue_device; /* read-write */
+    uint16_t queue_notif_config_data; /* read-only for driver */
+    uint16_t queue_reset; /* read-write */
+    /* About the administration virtqueue. */
+    uint16_t admin_queue_index; /* read-only for driver */
+    uint16_t admin_queue_num; /* read-only for driver */
+};
+
+
 struct virtio_disk {
-    struct PciDevice *pcidev; /* Associated PCI device */
+    struct PciDevice* pcidev; /* Associated PCI device */
 
-    volatile uint8_t *mmio_base_addr;
+    uint8_t* buffer;
 
-    struct virtq_desc descs[VIRTQ_ENTRY_NUM];
-    struct virtq_avail avail;
-    struct virtq_used used ALIGNED(PAGE_SIZE);
+    volatile uint8_t* mmio_base_addr;
+
+    struct virtq_desc* descs;
+    struct virtq_avail* avail;
+    struct virtq_used* used;
     int queue_index;
-    volatile uint16_t *used_index;
+    volatile uint16_t* used_index;
     uint16_t last_used_index;
-    struct virtio_blk_req *blk_req;
-} PACKED;
+    char free[VIRTQ_ENTRY_NUM];
+    struct virtio_blk_req* blk_req;
+};
 
 int virtio_disk_init(void);
 

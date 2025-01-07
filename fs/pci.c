@@ -303,6 +303,7 @@ find_pci_dev(int class, int sub) {
             DEBUG("Found PCI device: class %X, subclass %X\n", class, sub);
             return &pci_device_buffer[i];
         }
+        //cprintf("Found PCI device: class %X, subclass %X\n", pci_device_buffer[i].class, pci_device_buffer[i].subclass);
     }
     return 0;
 }
@@ -332,9 +333,9 @@ get_bar_address(struct PciDevice *pcid, uint32_t barno) {
     if (pcid == NULL || barno >= PCI_BAR_COUNT)
         return 0;
 
-    uintptr_t base_addr = pcid->bars[0].base_address;
-    if (pcid->bars[0].address_is_64bits)
-        base_addr |= (uint64_t)(pcie_io.read32(pcid, PCI_REG_BAR0 + 4)) << 32;
+    uintptr_t base_addr = pcid->bars[barno].base_address;
+    if (pcid->bars[barno].address_is_64bits)
+        base_addr |= (uint64_t)(pcie_io.read32(pcid, PCI_REG_BAR0 + 4 * barno)) << 32;
 
     return base_addr;
 }
@@ -486,4 +487,36 @@ pci_init(char **argv) {
 
     /* Scan all busses starting at bus 0. */
     pci_check_busses(0, NULL);
+}
+
+void get_virtio_bar_and_offset(struct PciDevice* pcid, uint8_t* barrno, uint32_t* offset) {
+    uint8_t cap_offset = pcie_io.read8(pcid, PCI_REG_CAPABILITIES);
+    cprintf("OFFSET: %u\n", cap_offset);
+
+    while (cap_offset != 0) {
+        // Прочитать текущую способность
+        uint8_t cap_vndr = pcie_io.read8(pcid, cap_offset);
+        uint8_t cap_next = pcie_io.read8(pcid, cap_offset + 1);
+        uint8_t cap_type = pcie_io.read8(pcid, cap_offset + 3);
+        uint8_t cap_bar = pcie_io.read8(pcid, cap_offset + 4);
+        uint32_t new_offset = pcie_io.read32(pcid, cap_offset + 8);
+
+        // Обработать конкретную способность (cap_vndr определяет тип)
+        if (cap_vndr == 0x09) { // Vendor-specific capability
+            if (cap_type == 1) {
+                //cprintf("VENDOR: 0x%x\n", pcid->vendor_id);
+                //cprintf("TYPE: %u\n", cap_type);
+                //cprintf("BAR: %u\n", cap_bar);
+                //cprintf("OFFSET: %u\n", new_offset);
+                *barrno = cap_bar;
+                *offset = new_offset;
+                return;
+            }
+        }
+
+        // Перейти к следующей способности
+        cap_offset = cap_next;
+    }
+
+    panic("NO vendor!");
 }
