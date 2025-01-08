@@ -25,12 +25,12 @@ static int virtio_map(struct virtio_disk *disk, uint32_t* mult) {
 
     // for read-write
     disk->mmio_notify_addr = (volatile uint8_t *)VIRTIO_QUEUE;
-    
+
     uint8_t old_barno = barno;
     get_virtio_bar_and_offset_and_mult(disk->pcidev, &barno, &offset, mult);
 
-    size = get_bar_size(disk->pcidev, barno);
     if (barno != old_barno) {
+        size = get_bar_size(disk->pcidev, barno);
         uintptr_t adr2 = get_bar_address(disk->pcidev, barno);
         cprintf("BAR: %x\n", barno);
         cprintf("OFFSET: %x\n", offset);
@@ -50,23 +50,23 @@ static int virtio_map(struct virtio_disk *disk, uint32_t* mult) {
 void debug_pci_cfg(volatile struct virtio_pci_common_cfg* cfg) {
     cprintf("#################################################\n");
     cprintf("cfg->device_feature_select: %x \n", cfg->device_feature_select);
-    cprintf("cfg->device_feature: %x \n", cfg->device_feature); 
-    cprintf("cfg->driver_feature_select: %x \n", cfg->driver_feature_select); 
-    cprintf("cfg->driver_feature: %x \n", cfg->driver_feature); 
-    cprintf("cfg->config_msix_vector: %x \n", cfg->config_msix_vector); 
-    cprintf("cfg->num_queues: %x \n", cfg->num_queues); 
-    cprintf("cfg->queue_select: %x \n", cfg->queue_select); 
-    cprintf("cfg->queue_size: %x \n", cfg->queue_size); 
-    cprintf("cfg->queue_msix_vector: %x \n", cfg->queue_msix_vector); 
-    cprintf("cfg->queue_enable: %x \n", cfg->queue_enable); 
-    cprintf("cfg->queue_notify_off: %x \n", cfg->queue_notify_off); 
-    cprintf("cfg->queue_desc: %lx \n", cfg->queue_desc); 
-    cprintf("cfg->queue_driver: %lx \n", cfg->queue_driver); 
-    cprintf("cfg->queue_device: %lx \n", cfg->queue_device); 
-    cprintf("cfg->queue_notif_config_data: %x \n", cfg->queue_notif_config_data); 
-    cprintf("cfg->queue_reset: %x \n", cfg->queue_reset); 
-    cprintf("cfg->admin_queue_index: %x \n", cfg->admin_queue_index); 
-    cprintf("cfg->admin_queue_num: %x \n", cfg->admin_queue_num); 
+    cprintf("cfg->device_feature: %x \n", cfg->device_feature);
+    cprintf("cfg->driver_feature_select: %x \n", cfg->driver_feature_select);
+    cprintf("cfg->driver_feature: %x \n", cfg->driver_feature);
+    cprintf("cfg->config_msix_vector: %x \n", cfg->config_msix_vector);
+    cprintf("cfg->num_queues: %x \n", cfg->num_queues);
+    cprintf("cfg->queue_select: %x \n", cfg->queue_select);
+    cprintf("cfg->queue_size: %x \n", cfg->queue_size);
+    cprintf("cfg->queue_msix_vector: %x \n", cfg->queue_msix_vector);
+    cprintf("cfg->queue_enable: %x \n", cfg->queue_enable);
+    cprintf("cfg->queue_notify_off: %x \n", cfg->queue_notify_off);
+    cprintf("cfg->queue_desc: %lx \n", cfg->queue_desc);
+    cprintf("cfg->queue_driver: %lx \n", cfg->queue_driver);
+    cprintf("cfg->queue_device: %lx \n", cfg->queue_device);
+    cprintf("cfg->queue_notif_config_data: %x \n", cfg->queue_notif_config_data);
+    cprintf("cfg->queue_reset: %x \n", cfg->queue_reset);
+    cprintf("cfg->admin_queue_index: %x \n", cfg->admin_queue_index);
+    cprintf("cfg->admin_queue_num: %x \n", cfg->admin_queue_num);
     cprintf("#################################################\n");
 }
 
@@ -99,7 +99,7 @@ int virtio_disk_init(void) {
 
     volatile struct virtio_pci_common_cfg* cfg = (volatile struct virtio_pci_common_cfg*)disk->mmio_base_addr;
 
-    //debug_pci_cfg(cfg);
+    debug_pci_cfg(cfg);
     
     // checking driver_status
     uint32_t status = 0;
@@ -124,14 +124,13 @@ int virtio_disk_init(void) {
     if (cfg->queue_enable != 0)
         panic("virtio_init: failed to enable queue\n");
 
-    cprintf("num_queue: %d\n", cfg->num_queues);
     uint16_t max = cfg->queue_size;
     if(max == 0)
         panic("virtio disk has no queue 0");
     if(max < VIRTQ_ENTRY_NUM)
         panic("virtio disk max queue too short");
 
-    // alloc 
+    // alloc
     err = sys_alloc_region(0, disk->buffer, 3 * PAGE_SIZE, PROT_RW | PROT_CD);
     if (err)
         panic("Virtio err to alloc_region\n");
@@ -154,7 +153,7 @@ int virtio_disk_init(void) {
     cfg->queue_desc = get_phys_addr(disk->descs);
     cfg->queue_device = get_phys_addr(disk->used);
     cfg->queue_driver = get_phys_addr(disk->avail);
-    
+
     cfg->queue_enable = 1;
 
     for (int i = 0; i < VIRTQ_ENTRY_NUM; ++i)
@@ -164,6 +163,9 @@ int virtio_disk_init(void) {
     cfg->device_status = status;
 
     disk->mmio_notify_addr += cfg->queue_notify_off * mult;
+    disk->last_used_index = 0;
+
+    debug_pci_cfg(cfg);
 
     return VIRTIO_OK;
 }
@@ -210,7 +212,7 @@ static int alloc3_desc(struct virtio_disk* disk, int *idx) {
                free_desc(disk, idx[j]);
             return -1;
         }
-    } 
+    }
     return 0;
 }
 
@@ -232,7 +234,7 @@ int virtio_disk_rw(struct virtio_disk* disk, uint64_t secno, const void *src, si
     buf0->reserved = 0;
     buf0->sector = secno;
 
-    disk->descs[idx[0]].addr = (uint64_t) buf0;
+    disk->descs[idx[0]].addr = (uint64_t)get_phys_addr((void *)buf0);
     disk->descs[idx[0]].len = sizeof(struct virtio_blk_req);
     disk->descs[idx[0]].flags = VIRTQ_DESC_F_NEXT;
     disk->descs[idx[0]].next = idx[1];
@@ -259,10 +261,10 @@ int virtio_disk_rw(struct virtio_disk* disk, uint64_t secno, const void *src, si
     __atomic_store_n(&disk->avail->index, disk->avail->index + 1, __ATOMIC_RELEASE);
 
     volatile uint16_t* adr = (volatile uint16_t*)disk->mmio_notify_addr;
-    __atomic_store_n(&adr, 0, __ATOMIC_RELEASE);   
+    __atomic_store_n(adr, 0, __ATOMIC_RELEASE);   
 
     int status;
-    while ((status = __atomic_load_n(&disk->info[idx[0]], __ATOMIC_ACQUIRE)) == 0xFF)
+    while ((status = __atomic_load_n(&disk->info[idx[0]], __ATOMIC_ACQUIRE)) == 0xff)
         asm volatile ("pause");
     
     free_chain(disk, idx[0]);
@@ -282,7 +284,5 @@ int virtio_read(uint64_t secno, void *dst, size_t nsecs) {
     if (!dst)
         return -VIRTIO_BAD_ARG;
 
-    if (!dst) return -VIRTIO_BAD_ARG;
-
-    return virtio_disk_rw(&d, secno, dst, nsecs, 0);    
+    return virtio_disk_rw(&d, secno, dst, nsecs, 0);
 }

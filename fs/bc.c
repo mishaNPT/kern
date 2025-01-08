@@ -40,7 +40,7 @@ bc_pgfault(struct UTrapframe *utf) {
     
     *(char *)addr = 0;
     if (virtio_read(blockno * BLKSECTS, addr, BLKSECTS) != VIRTIO_OK)
-        panic("failed ro read nvme\n");
+        panic("failed ro read virtio\n");
 
     return 1;
 }
@@ -83,6 +83,8 @@ check_bc(void) {
 
     /* Back up super block */
     memmove(&backup, diskaddr(1), sizeof backup);
+
+    cprintf("%x\n", *(uint32_t *)diskaddr(1));
 
     /* Smash it */
     strcpy(diskaddr(1), "OOPS!\n");
