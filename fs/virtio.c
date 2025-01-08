@@ -84,7 +84,7 @@ int virtio_disk_init(void) {
     if (disk->pcidev->vendor_id != 0x1af4)
         panic("virtio init: wrong pci vendor_id\n");
 
-    if (disk->pcidev->device_id < 0x1000 && disk->pcidev->device_id > 0x107f)
+    if (disk->pcidev->device_id < 0x1000 || disk->pcidev->device_id > 0x107f)
         panic("virtio init: wrong pci device_id\n");
 
     if (disk->pcidev->revision_id < 1)
@@ -99,7 +99,7 @@ int virtio_disk_init(void) {
 
     volatile struct virtio_pci_common_cfg* cfg = (volatile struct virtio_pci_common_cfg*)disk->mmio_base_addr;
 
-    debug_pci_cfg(cfg);
+    //debug_pci_cfg(cfg);
     
     // checking driver_status
     uint32_t status = 0;
@@ -131,6 +131,7 @@ int virtio_disk_init(void) {
         panic("virtio disk max queue too short");
 
     // alloc
+    disk->buffer = (void *)VIRTIO_BUFFER;
     err = sys_alloc_region(0, disk->buffer, 3 * PAGE_SIZE, PROT_RW | PROT_CD);
     if (err)
         panic("Virtio err to alloc_region\n");
@@ -138,13 +139,11 @@ int virtio_disk_init(void) {
     for (int i = 0; i < 3; ++i) {
         volatile char* page = (volatile char *)disk->buffer + PAGE_SIZE * i;
         *page = 0;
-        if (i == 1)
-            disk->descs = (struct virtq_desc*) page;
-        if (i == 2)
-            disk->avail = (struct virtq_avail*) page;
-        else
-            disk->used = (struct virtq_used*) page;
     }
+
+    disk->descs = (struct virtq_desc*) (disk->buffer);
+    disk->avail = (struct virtq_avail*) (disk->buffer + PAGE_SIZE);
+    disk->used = (struct virtq_used*) (disk->buffer + PAGE_SIZE * 2);
 
     // set queue size.
     cfg->queue_size = VIRTQ_ENTRY_NUM;
@@ -165,7 +164,7 @@ int virtio_disk_init(void) {
     disk->mmio_notify_addr += cfg->queue_notify_off * mult;
     disk->last_used_index = 0;
 
-    debug_pci_cfg(cfg);
+    //debug_pci_cfg(cfg);
 
     return VIRTIO_OK;
 }
@@ -263,13 +262,14 @@ int virtio_disk_rw(struct virtio_disk* disk, uint64_t secno, const void *src, si
     volatile uint16_t* adr = (volatile uint16_t*)disk->mmio_notify_addr;
     __atomic_store_n(adr, 0, __ATOMIC_RELEASE);   
 
-    int status;
-    while ((status = __atomic_load_n(&disk->info[idx[0]], __ATOMIC_ACQUIRE)) == 0xff)
-        asm volatile ("pause");
-    
+    int index;
+    while ((index = __atomic_load_n(&disk->used->index, __ATOMIC_ACQUIRE)) != disk->last_used_index + 1)
+         asm volatile ("pause");   
+
+    disk->last_used_index = index;
     free_chain(disk, idx[0]);
 
-    return status;
+    return __atomic_load_n(&disk->info[idx[0]], __ATOMIC_ACQUIRE);
 }
 
 int virtio_write(uint64_t secno, const void *src, size_t nsecs) {
