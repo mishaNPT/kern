@@ -1,6 +1,7 @@
 
 #include "fs.h"
 #include "nvme.h"
+#include "virtio.h"
 
 /* Return the virtual address of this disk block. */
 void *
@@ -38,7 +39,7 @@ bc_pgfault(struct UTrapframe *utf) {
         panic("bc_pgfault failed to alloc region\n");
     
     *(char *)addr = 0;
-    if (nvme_read(blockno * BLKSECTS, addr, BLKSECTS) != NVME_OK)
+    if (virtio_read(blockno * BLKSECTS, addr, BLKSECTS) != VIRTIO_OK)
         panic("failed ro read nvme\n");
 
     return 1;
@@ -65,7 +66,7 @@ flush_block(void *addr) {
     if (!is_page_present(addr) || !is_page_dirty(addr))
         return;
 
-    if (nvme_write(blockno * BLKSECTS, addr, BLKSECTS) != NVME_OK)
+    if (virtio_write(blockno * BLKSECTS, addr, BLKSECTS) != VIRTIO_OK)
         panic("flush_block failed to write\n");
 
     if (sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, get_prot(addr)))

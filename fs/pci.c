@@ -301,10 +301,11 @@ find_pci_dev(int class, int sub) {
         if (pci_device_buffer[i].class == class &&
             pci_device_buffer[i].subclass == sub) {
             DEBUG("Found PCI device: class %X, subclass %X\n", class, sub);
+            //cprintf("result: %x\n", pcie_io.read16(&pci_device_buffer[i], PCI_REG_COMMAND));
             return &pci_device_buffer[i];
         }
         //cprintf("Found PCI device: class %X, subclass %X\n", pci_device_buffer[i].class, pci_device_buffer[i].subclass);
-    }
+    }   
     return 0;
 }
 
@@ -335,7 +336,7 @@ get_bar_address(struct PciDevice *pcid, uint32_t barno) {
 
     uintptr_t base_addr = pcid->bars[barno].base_address;
     if (pcid->bars[barno].address_is_64bits)
-        base_addr |= (uint64_t)(pcie_io.read32(pcid, PCI_REG_BAR0 + 4 * barno)) << 32;
+        base_addr |= (uint64_t)(pcie_io.read32(pcid, PCI_REG_BAR0 + 4 * barno + 4)) << 32;
 
     return base_addr;
 }
@@ -498,13 +499,42 @@ void get_virtio_bar_and_offset(struct PciDevice* pcid, uint8_t* barrno, uint32_t
         uint8_t cap_next = pcie_io.read8(pcid, cap_offset + 1);
         uint8_t cap_type = pcie_io.read8(pcid, cap_offset + 3);
         uint8_t cap_bar = pcie_io.read8(pcid, cap_offset + 4);
-        uint32_t new_offset = pcie_io.read32(pcid, cap_offset + 8);
 
         // Обработать конкретную способность (cap_vndr определяет тип)
         if (cap_vndr == 0x09) { // Vendor-specific capability
             if (cap_type == 1) {
+                uint32_t new_offset = pcie_io.read32(pcid, cap_offset + 8);
                 *barrno = cap_bar;
                 *offset = new_offset;
+                return;
+            }
+        }
+
+        // Перейти к следующей способности
+        cap_offset = cap_next;
+    }
+
+    panic("NO vendor!");
+}
+
+void get_virtio_bar_and_offset_and_mult(struct PciDevice* pcid, uint8_t* barrno, uint32_t* offset, uint32_t* multiply) {
+    uint8_t cap_offset = pcie_io.read8(pcid, PCI_REG_CAPABILITIES);
+
+    while (cap_offset != 0) {
+        // Прочитать текущую способность
+        uint8_t cap_vndr = pcie_io.read8(pcid, cap_offset);
+        uint8_t cap_next = pcie_io.read8(pcid, cap_offset + 1);
+        uint8_t cap_type = pcie_io.read8(pcid, cap_offset + 3);
+        uint8_t cap_bar = pcie_io.read8(pcid, cap_offset + 4);
+
+        // Обработать конкретную способность (cap_vndr определяет тип)
+        if (cap_vndr == 0x09) { // Vendor-specific capability
+            if (cap_type == 2) {
+                uint32_t new_multiply = pcie_io.read32(pcid, cap_offset + 16);
+                uint32_t new_offset = pcie_io.read32(pcid, cap_offset + 8);
+                *barrno = cap_bar;
+                *offset = new_offset;
+                *multiply = new_multiply;
                 return;
             }
         }

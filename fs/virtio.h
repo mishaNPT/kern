@@ -6,10 +6,8 @@
 #define PACKED     __attribute__((packed))
 #define ALIGNED(n) __attribute__((aligned(n)))
 
-#define SECTOR_SIZE       512
 #define VIRTQ_ENTRY_NUM   16
-#define VIRTIO_DEVICE_BLK 2
-#define VIRTIO_BLK_PADDR  0x10001000
+#define SECTOR_SIZE 512
 
 // device feature bits
 #define VIRTIO_BLK_F_RO              5	/* Disk is read-only */
@@ -20,12 +18,11 @@
 #define VIRTIO_RING_F_INDIRECT_DESC 28
 #define VIRTIO_RING_F_EVENT_IDX     29
 
-#define VIRTIO_STATUS_ACK       1
-#define VIRTIO_STATUS_DRIVER    2
-#define VIRTIO_STATUS_DRIVER_OK 4
-#define VIRTIO_STATUS_FEAT_OK   8
+#define VIRTIO_CONFIG_S_ACKNOWLEDGE	1
+#define VIRTIO_CONFIG_S_DRIVER		2
+#define VIRTIO_CONFIG_S_DRIVER_OK	4
+#define VIRTIO_CONFIG_S_FEATURES_OK	8
 
-#define VIRTQ_AVAIL_F_NO_INTERRUPT 1
 #define VIRTQ_DESC_F_NEXT          1
 #define VIRTQ_DESC_F_WRITE         2
 
@@ -80,8 +77,6 @@ struct virtio_blk_req {
     uint32_t type;
     uint32_t reserved;
     uint64_t sector;
-    uint8_t data[512];
-    uint8_t status;
 } PACKED;
 
 struct virtio_pci_common_cfg {
@@ -117,6 +112,7 @@ struct virtio_disk {
     uint8_t* buffer;
 
     volatile uint8_t* mmio_base_addr;
+    volatile uint8_t* mmio_notify_addr;
 
     struct virtq_desc* descs;
     struct virtq_avail* avail;
@@ -125,13 +121,14 @@ struct virtio_disk {
     volatile uint16_t* used_index;
     uint16_t last_used_index;
     bool free[VIRTQ_ENTRY_NUM];
-    struct virtio_blk_req* blk_req;
+    struct virtio_blk_req blk_req[VIRTQ_ENTRY_NUM];
+    volatile uint8_t info[VIRTQ_ENTRY_NUM];
 };
 
 int virtio_disk_init(void);
 
 // paramentry vizmoshno ne te
-//int virtio_write(uint64_t secno, const void *src, size_t nsecs);
-//int virtio_read(uint64_t secno, void *dst, size_t nsecs);
+int virtio_write(uint64_t secno, const void *src, size_t nsecs);
+int virtio_read(uint64_t secno, void *dst, size_t nsecs);
 
 #endif

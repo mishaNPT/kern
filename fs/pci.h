@@ -34,6 +34,7 @@
 #define NVME_VADDR       0x7010000000
 #define NVME_QUEUE_VADDR 0x7020000000
 #define VIRTIO_VADDR     0x7030000000
+#define VIRTIO_QUEUE     0x7040000000
 
 #define PCI_MAX_DEVICES    10
 #define PCI_NUM_DEVICES    32
@@ -154,6 +155,7 @@ struct PcieIoOps {
 };
 
 void get_virtio_bar_and_offset(struct PciDevice* pcid, uint8_t* barrno, uint32_t* offset);
+void get_virtio_bar_and_offset_and_mult(struct PciDevice* pcid, uint8_t* barrno, uint32_t* offset, uint32_t* multiply);
 
 extern uint64_t tsc_freq;
 
